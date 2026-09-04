@@ -1,6 +1,7 @@
 import truck_hub
 import scraper_cars
 import scraper_autotrader
+import reporter
 
 def main():
     print("=== Starting Automated HD Truck Market Pipeline ===")
@@ -18,6 +19,11 @@ def main():
     print("\n--- Initiating Autotrader Sweep ---")
     scraper_autotrader.sweep_autotrader()
     scraper_autotrader.process_autotrader_batch()
+
+    # 4. Generate Dashboard & Send Digest
+    print("\n--- Generating Reports & Email Digest ---")
+    reporter.generate_dashboard()
+    reporter.send_email_digest()
 
     print("\n=== Pipeline Complete ===")
 
