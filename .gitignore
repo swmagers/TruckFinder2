@@ -1,0 +1,13 @@
+# Virtual Environment
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Local Environment Variables
+.env*.db
+venv/
+.env
+__pycache__/

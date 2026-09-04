@@ -1,0 +1,41 @@
+name: HD Truck Market Scraper
+
+on:
+  schedule:
+    # Runs at 10:00 UTC (3:00 AM Pacific) every Tuesday and Friday
+    - cron: '0 10 * * 2,5'
+  workflow_dispatch: # Adds a button to GitHub to let you trigger it manually anytime
+
+jobs:
+  scrape_and_score:
+    runs-on: ubuntu-latest
+    
+    # Permissions required to let the bot commit the updated DB back to the repo
+    permissions:
+      contents: write 
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Master Scraper
+        env:
+          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python run_all_scrapers.py
+
+      - name: Commit Updated SQLite Database
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Automated data pipeline update: New HD truck listings"
+          file_pattern: 'hd_truck_market.db'
