@@ -86,6 +86,14 @@ def init_db():
 def purge_non_hd_records():
     conn = sqlite3.connect('hd_truck_market.db')
     cursor = conn.cursor()
+    
+    # Strip legacy markdown syntax from stored URLs
+    cursor.execute("""
+        UPDATE hd_truck_market 
+        SET url = REPLACE(REPLACE(url, '[https://www.autotrader.com](', ''), ')', '') 
+        WHERE url LIKE '%[%'
+    """)
+
     cursor.execute('''
         DELETE FROM hd_truck_market 
         WHERE title IS NOT NULL 
