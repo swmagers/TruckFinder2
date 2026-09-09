@@ -50,13 +50,11 @@ def process_cars_batch():
 
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Deep Extraction Container
         extracted_notes = []
         json_ld_data = {}
         lat, lon = None, None
         price_history_str = ""
 
-        # 1. Parse JSON-LD Scripts
         for script in soup.find_all('script', type='application/ld+json'):
             try:
                 data = json.loads(script.string or '{}')
@@ -69,7 +67,6 @@ def process_cars_batch():
             except Exception:
                 pass
 
-        # 2. Parse __NEXT_DATA__ if available
         next_data_script = soup.find('script', id='__NEXT_DATA__')
         if next_data_script and next_data_script.string:
             try:
@@ -86,13 +83,12 @@ def process_cars_batch():
                     price_history_str = " -> ".join(ph_list)
 
                 if vdp.get('features'):
-                    extracted_notes.append("FEATURES & SPECS: " + ", ".join(vdp['features']))
+                    extracted_notes.append("FEATURES: " + ", ".join(vdp['features']))
                 if vdp.get('sellerNotes'):
                     extracted_notes.append("SELLER NOTES: " + vdp['sellerNotes'])
             except Exception:
                 pass
 
-        # Title
         title_el = soup.find('h1')
         title = title_el.text.strip() if title_el else json_ld_data.get('name', 'Unknown Truck')
 
@@ -101,11 +97,9 @@ def process_cars_batch():
             truck_hub.remove_listing(old_vin, url)
             continue
 
-        # VIN
         vin_match = re.search(r'([A-HJ-NPR-Z0-9]{17})', html)
         actual_vin = vin_match.group(1) if vin_match else json_ld_data.get('vehicleIdentificationNumber', old_vin)
 
-        # Price
         price_val = None
         price_el = soup.find(class_=re.compile(r'primary-price|price'))
         if price_el:
@@ -113,7 +107,6 @@ def process_cars_batch():
         elif json_ld_data.get('offers', {}).get('price'):
             price_val = truck_hub.safe_int(json_ld_data['offers']['price'])
 
-        # Mileage
         mileage_val = None
         mileage_el = soup.find(string=re.compile(r'([\d,]+)\s*(mi\.|miles)', re.IGNORECASE))
         if mileage_el:
@@ -122,14 +115,12 @@ def process_cars_batch():
             m_data = json_ld_data['mileageFromOdometer']
             mileage_val = truck_hub.safe_int(m_data.get('value') if isinstance(m_data, dict) else m_data)
 
-        # Engine
         engine_str = json_ld_data.get('vehicleEngine', {}).get('engineType', '')
         if not engine_str:
             engine_el = soup.find(string=re.compile(r'engine', re.IGNORECASE))
             if engine_el and engine_el.parent:
                 engine_str = engine_el.parent.text.strip()
 
-        # Specs & Seller Notes from DOM
         for sel in ['.sellers-notes', '.pdp-description', '.fancy-description', '[data-qa="seller-notes"]', '.features-and-specs']:
             found_el = soup.select_one(sel)
             if found_el:
@@ -140,10 +131,14 @@ def process_cars_batch():
 
         full_dealer_context = "\n".join(extracted_notes)
 
-        # Calculate Distance to San Diego
+        # Fallback text regex for mileage
+        if not mileage_val and full_dealer_context:
+            m_match = re.search(r'([\d,]{2,7})\s*(?:miles|mile|mi\b)', full_dealer_context, re.IGNORECASE)
+            if m_match:
+                mileage_val = truck_hub.safe_int(m_match.group(1))
+
         distance_miles = truck_hub.calc_distance_from_sd(lat, lon)
 
-        # Claude Analysis
         ai_data = truck_hub.analyze_truck_with_claude(
             title=title,
             engine_raw=engine_str,
@@ -188,4 +183,4 @@ def process_cars_batch():
             distance_miles=distance_miles
         )
         dist_str = f"{distance_miles} mi to SD" if distance_miles else region
-        print(f"  Processed Cars.com VIN: {actual_vin} | Score: {score}/100 | {dist_str} | {title}")
+        print(f"  Processed Cars.com VIN: {actual_vin} | Score: {score}/100 | {dist_str} | Odo: {mileage_val or 'N/A'} | {title}")
