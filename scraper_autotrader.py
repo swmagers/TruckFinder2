@@ -20,15 +20,35 @@ def sweep_autotrader():
         if not html:
             continue
         soup = BeautifulSoup(html, 'html.parser')
-        links = soup.find_all('a', href=re.compile(r'/cars-for-sale/vehicle/'))
+        
+        # Tightened selector: Find listing cards and ensure card text includes HD keywords before enqueueing
+        cards = soup.find_all(attrs={"data-cmp": re.compile(r'inventoryListing', re.I)})
+        if not cards:
+            cards = soup.find_all('div', class_=re.compile(r'inventory-listing|item-card', re.I))
+
         found = 0
-        for a in links:
-            href = a.get('href')
-            if href:
+        if cards:
+            for card in cards:
+                card_text = card.get_text().lower()
+                if any(k in card_text for k in ['2500', 'f-250', 'f250', 'f 250']):
+                    a = card.find('a', href=re.compile(r'/cars-for-sale/vehicle/\d+'))
+                    if a and a.get('href'):
+                        href = a.get('href')
+                        clean_url = "[https://www.autotrader.com](https://www.autotrader.com)" + href.split('?')[0] if href.startswith('/') else href.split('?')[0]
+                        truck_hub.save_raw_listing(clean_url, region)
+                        found += 1
+        else:
+            # Fallback strict link sweep requiring numeric ID and parent HD text
+            links = soup.find_all('a', href=re.compile(r'/cars-for-sale/vehicle/\d+'))
+            for a in links:
+                href = a.get('href')
+                parent_text = (a.parent.get_text() if a.parent else "").lower()
+                if parent_text and not any(k in parent_text for k in ['2500', 'f-250', 'f250', 'f 250']):
+                    continue
                 clean_url = "[https://www.autotrader.com](https://www.autotrader.com)" + href.split('?')[0] if href.startswith('/') else href.split('?')[0]
                 truck_hub.save_raw_listing(clean_url, region)
                 found += 1
-        print(f"  Found {found} vehicle links in {region}")
+        print(f"  Found {found} HD vehicle links in {region}")
 
 def process_autotrader_batch():
     conn = sqlite3.connect('hd_truck_market.db')
@@ -50,7 +70,6 @@ def process_autotrader_batch():
 
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Deep JSON Extraction
         json_ld_data = {}
         lat, lon = None, None
         extracted_notes = []
@@ -86,7 +105,7 @@ def process_autotrader_batch():
         elif json_ld_data.get('offers', {}).get('price'):
             price_val = truck_hub.safe_int(json_ld_data['offers']['price'])
 
-        # Mileage
+        # Mileage with Text Regex Fallback
         mileage_val = None
         mileage_el = soup.find(string=re.compile(r'([\d,]+)\s*miles', re.IGNORECASE))
         if mileage_el:
@@ -95,6 +114,21 @@ def process_autotrader_batch():
             m_data = json_ld_data['mileageFromOdometer']
             mileage_val = truck_hub.safe_int(m_data.get('value') if isinstance(m_data, dict) else m_data)
 
+        # Description / Seller Specs
+        if json_ld_data.get('description'):
+            extracted_notes.append(json_ld_data['description'])
+        
+        body_text = soup.get_text()
+        extracted_notes.append(body_text[:5000])
+
+        full_dealer_context = "\n".join(extracted_notes)
+
+        # Fallback text regex for mileage (e.g., "At 69,622 miles")
+        if not mileage_val and full_dealer_context:
+            m_match = re.search(r'([\d,]{2,7})\s*(?:miles|mile|mi\b)', full_dealer_context, re.IGNORECASE)
+            if m_match:
+                mileage_val = truck_hub.safe_int(m_match.group(1))
+
         # Engine
         engine_str = json_ld_data.get('vehicleEngine', {}).get('engineType', '')
         if not engine_str:
@@ -102,13 +136,6 @@ def process_autotrader_batch():
             if engine_el and engine_el.parent:
                 engine_str = engine_el.parent.text.strip()
 
-        # Description / Specs
-        if json_ld_data.get('description'):
-            extracted_notes.append(json_ld_data['description'])
-        else:
-            extracted_notes.append(soup.get_text()[:4000])
-
-        full_dealer_context = "\n".join(extracted_notes)
         distance_miles = truck_hub.calc_distance_from_sd(lat, lon)
 
         ai_data = truck_hub.analyze_truck_with_claude(
@@ -154,4 +181,4 @@ def process_autotrader_batch():
             distance_miles=distance_miles
         )
         dist_str = f"{distance_miles} mi to SD" if distance_miles else region
-        print(f"  Processed Autotrader VIN: {actual_vin} | Score: {score}/100 | {dist_str} | {title}")
+        print(f"  Processed Autotrader VIN: {actual_vin} | Score: {score}/100 | {dist_str} | Odo: {mileage_val or 'N/A'} | {title}")
