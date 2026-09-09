@@ -6,13 +6,12 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 DB_NAME = 'hd_truck_market.db'
-DASHBOARD_URL = "https://swmagers.github.io/TruckFinder2/"
+DASHBOARD_URL = "[https://swmagers.github.io/TruckFinder2/](https://swmagers.github.io/TruckFinder2/)"
 
 def fetch_analytics():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # 1. Macro KPIs
     cursor.execute('''
         SELECT 
             COUNT(*),
@@ -25,7 +24,6 @@ def fetch_analytics():
     ''')
     total_trucks, avg_price, avg_miles, high_score_cnt, avg_payload = cursor.fetchone()
 
-    # 2. Make/Model Breakdown
     cursor.execute('''
         SELECT 
             CASE 
@@ -46,7 +44,6 @@ def fetch_analytics():
     ''')
     model_stats = cursor.fetchall()
 
-    # 3. Regional Analysis
     cursor.execute('''
         SELECT 
             COALESCE(region_found, 'Unknown') as region,
@@ -60,7 +57,6 @@ def fetch_analytics():
     ''')
     region_stats = cursor.fetchall()
 
-    # 4. Engine Type Comparison (Gas vs Diesel)
     cursor.execute('''
         SELECT 
             CASE 
@@ -78,7 +74,6 @@ def fetch_analytics():
     ''')
     engine_stats = cursor.fetchall()
 
-    # 5. Price Drop / Deal Tracking
     cursor.execute('''
         SELECT title, original_price, current_price, (original_price - current_price) as price_drop, url, region_found
         FROM hd_truck_market
@@ -109,7 +104,7 @@ def generate_dashboard():
     cursor = conn.cursor()
     cursor.execute('''
         SELECT title, current_price, mileage, engine, payload_capacity_lbs, 
-               airstream_readiness_score, ai_towing_summary, url, region_found, last_seen
+               airstream_readiness_score, ai_towing_summary, url, region_found, last_seen, distance_miles
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score > 0
         ORDER BY airstream_readiness_score DESC, current_price ASC
@@ -117,7 +112,6 @@ def generate_dashboard():
     trucks = cursor.fetchall()
     conn.close()
 
-    # Model Metric Cards
     model_cards_html = ""
     for stat in data["model_stats"]:
         make_model, count, avg_score, avg_price, avg_miles = stat
@@ -130,7 +124,6 @@ def generate_dashboard():
         </div>
         """
 
-    # Engine Metric Cards
     engine_cards_html = ""
     for stat in data["engine_stats"]:
         eng_type, count, avg_score, avg_price, avg_payload = stat
@@ -145,7 +138,6 @@ def generate_dashboard():
         </div>
         """
 
-    # Price Drops Section
     price_drops_html = ""
     if data["price_drops"]:
         rows = ""
@@ -172,13 +164,13 @@ def generate_dashboard():
         </div>
         """
 
-    # Table rows
     rows_html = ""
     for t in trucks:
-        title, price, miles, engine, payload, score, summary, url, region, last_seen = t
+        title, price, miles, engine, payload, score, summary, url, region, last_seen, dist_miles = t
         price_str = f"${price:,}" if price else "N/A"
         miles_str = f"{miles:,} mi" if miles else "N/A"
         payload_str = f"{payload:,} lbs" if payload else "N/A"
+        dist_str = f"{dist_miles} mi to SD" if dist_miles else region
         score_color = "#2e7d32" if score >= 75 else ("#f57c00" if score >= 60 else "#c62828")
 
         rows_html += f"""
@@ -189,19 +181,16 @@ def generate_dashboard():
             <td>{miles_str}</td>
             <td>{engine or 'Unknown'}</td>
             <td>{payload_str}</td>
-            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">{region}</span></td>
-            <td style="font-size:0.9em; color:#555;">{summary or ''}</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">{dist_str}</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">{summary or ''}</td>
         </tr>
         """
 
-    # Chart JSON Data
     model_labels = [m[0] for m in data["model_stats"]]
     model_scores = [m[2] for m in data["model_stats"]]
-    model_prices = [m[3] for m in data["model_stats"]]
 
     region_labels = [r[0] for r in data["region_stats"]]
     region_counts = [r[1] for r in data["region_stats"]]
-    region_prices = [r[3] for r in data["region_stats"]]
 
     engine_labels = [e[0] for e in data["engine_stats"]]
     engine_counts = [e[1] for e in data["engine_stats"]]
@@ -212,7 +201,7 @@ def generate_dashboard():
     <title>Airstream Safari HD Truck Dashboard</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; background: #f8f9fa; color: #333; }}
         h1 {{ margin-bottom: 2px; }}
@@ -236,9 +225,8 @@ def generate_dashboard():
 </head>
 <body>
     <h1>🚚 HD Truck Market Intelligence</h1>
-    <p>Target: 2007 Airstream Safari 25' (7,000 lbs GVWR) | Live Market Analytics</p>
+    <p>Target: 2007 Airstream Safari 25' (7,000 lbs GVWR) | Distance Baseline: San Diego, CA (92101)</p>
     
-    <!-- KPI Row -->
     <div class="grid">
         <div class="card kpi-card">
             <div class="card-title" style="color:rgba(255,255,255,0.8);">Total Listings</div>
@@ -267,7 +255,6 @@ def generate_dashboard():
         </div>
     </div>
 
-    <!-- Models & Engines Grid -->
     <div class="grid">
         {model_cards_html}
     </div>
@@ -277,7 +264,6 @@ def generate_dashboard():
 
     {price_drops_html}
 
-    <!-- Interactive Charts Row -->
     <div class="charts-grid">
         <div class="chart-container">
             <h2>Readiness Score by Make/Model</h2>
@@ -293,7 +279,6 @@ def generate_dashboard():
         </div>
     </div>
 
-    <!-- Full Database Table -->
     <div class="section-container">
         <h2>All Active HD Truck Listings</h2>
         <table>
@@ -305,8 +290,8 @@ def generate_dashboard():
                     <th>Mileage</th>
                     <th>Engine</th>
                     <th>Payload</th>
-                    <th>Region</th>
-                    <th>Claude AI Towing Assessment</th>
+                    <th>Location / Dist</th>
+                    <th>Claude AI Listing Analysis</th>
                 </tr>
             </thead>
             <tbody>
@@ -316,7 +301,6 @@ def generate_dashboard():
     </div>
 
     <script>
-        // Chart 1: Model Scores
         new Chart(document.getElementById('modelScoreChart'), {{
             type: 'bar',
             data: {{
@@ -330,7 +314,6 @@ def generate_dashboard():
             options: {{ responsive: true, scales: {{ y: {{ min: 0, max: 100 }} }} }}
         }});
 
-        // Chart 2: Regional Counts
         new Chart(document.getElementById('regionChart'), {{
             type: 'bar',
             data: {{
@@ -344,7 +327,6 @@ def generate_dashboard():
             options: {{ responsive: true }}
         }});
 
-        // Chart 3: Engine Mix
         new Chart(document.getElementById('engineMixChart'), {{
             type: 'doughnut',
             data: {{
@@ -362,7 +344,7 @@ def generate_dashboard():
 """
     with open("index.html", "w") as f:
         f.write(html_content)
-    print("Dashboard index.html generated with interactive charts and analytics.")
+    print("Dashboard index.html generated with deep analytics and distance metrics.")
 
 def send_email_digest():
     user = os.getenv('EMAIL_USER')
@@ -376,7 +358,7 @@ def send_email_digest():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT title, current_price, mileage, engine, airstream_readiness_score, ai_towing_summary, url, region_found
+        SELECT title, current_price, mileage, engine, airstream_readiness_score, ai_towing_summary, url, region_found, distance_miles
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score >= 65
         ORDER BY airstream_readiness_score DESC, current_price ASC
@@ -389,32 +371,24 @@ def send_email_digest():
         print("No high-scoring trucks to report in email digest.")
         return
 
-    # Model Summary Bullets
     stats_summary_html = ""
     for stat in data["model_stats"]:
         make_model, count, avg_score, avg_price, avg_miles = stat
         price_fmt = f"${int(avg_price):,}" if avg_price else "N/A"
         stats_summary_html += f"<li><strong>{make_model}:</strong> {count} trucks | Avg Score: {avg_score}/100 | Avg Price: {price_fmt}</li>"
 
-    # Regional Summary Bullets
-    region_summary_html = ""
-    for r in data["region_stats"]:
-        reg, count, avg_score, avg_price = r
-        price_fmt = f"${int(avg_price):,}" if avg_price else "N/A"
-        region_summary_html += f"<li><strong>{reg}:</strong> {count} listings | Avg Price: {price_fmt}</li>"
-
-    # Top Picks
     items_html = ""
     for t in top_picks:
-        title, price, miles, engine, score, summary, url, region = t
+        title, price, miles, engine, score, summary, url, region, dist_miles = t
         price_str = f"${price:,}" if price else "N/A"
         miles_str = f"{miles:,} mi" if miles else "N/A"
+        dist_str = f"{dist_miles} mi to SD" if dist_miles else region
         
         items_html += f"""
         <div style="border-left: 4px solid #1a73e8; padding-left: 12px; margin-bottom: 20px;">
             <h3 style="margin:0 0 5px 0;"><a href="{url}" style="color:#1a73e8; text-decoration:none;">{title}</a></h3>
             <p style="margin:0 0 5px 0; font-weight:bold; color:#333;">
-                Score: <span style="color:#2e7d32;">{score}/100</span> | Price: {price_str} | Odometer: {miles_str} | Region: {region}
+                Score: <span style="color:#2e7d32;">{score}/100</span> | Price: {price_str} | Odometer: {miles_str} | Dist: {dist_str}
             </p>
             <p style="margin:0; font-size:0.9em; color:#555;"><em>"{summary}"</em></p>
         </div>
@@ -428,16 +402,11 @@ def send_email_digest():
     html_body = f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.5;">
-        <h2>HD Truck Market Executive Update</h2>
+        <h2>HD Truck Market Update</h2>
         
         <p><strong>Market Overview ({data['total_trucks']} total trucks tracked):</strong></p>
         <ul>
             {stats_summary_html}
-        </ul>
-
-        <p><strong>Regional Breakdown:</strong></p>
-        <ul>
-            {region_summary_html}
         </ul>
 
         <h3>Top Airstream-Ready Picks</h3>
