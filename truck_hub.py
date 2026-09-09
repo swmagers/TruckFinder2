@@ -122,11 +122,22 @@ def init_db():
 def purge_non_hd_records():
     conn = sqlite3.connect('hd_truck_market.db')
     cursor = conn.cursor()
+    
     cursor.execute("""
         UPDATE hd_truck_market 
         SET url = REPLACE(REPLACE(url, '[https://www.autotrader.com](', ''), ')', '') 
         WHERE url LIKE '%[%'
     """)
+    
+    # Wipe generic boilerplate AI summaries so they get re-analyzed with sharp specs
+    cursor.execute("""
+        UPDATE hd_truck_market 
+        SET ai_processed = 0 
+        WHERE ai_towing_summary LIKE '%provides ample power%' 
+           OR ai_towing_summary LIKE '%buyers should verify%'
+           OR ai_towing_summary LIKE '%generally well-suited%'
+    """)
+
     cursor.execute('''
         DELETE FROM hd_truck_market 
         WHERE title IS NOT NULL 
@@ -210,29 +221,30 @@ def analyze_truck_with_claude(title, engine_raw, dealer_text, price=None, mileag
 
     ai_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     prompt = f"""
-    You are a sharp, concise heavy-duty truck analyst for a buyer pulling a 2007 Airstream Safari 25' (7,000 lbs GVWR, ~1,100 lbs tongue weight).
-    Evaluate this specific listing based STRICTLY on the extracted data provided below.
+    You are a sharp, factual heavy-duty truck analyst evaluating a listing for a buyer towing a 2007 Airstream Safari 25' (7,000 lbs GVWR, ~1,100 lbs tongue weight).
 
-    Vehicle: {title}
-    Price: ${price or 'Unlisted'} | Mileage: {mileage or 'Unlisted'}
-    Engine: {engine_raw or 'Unlisted'}
-    Price History Notes: {price_history or 'None'}
-    Extracted Specs & Seller Description:
+    Extracted Listing Data:
+    - Vehicle: {title}
+    - Listed Price: ${price or 'Unlisted'}
+    - Mileage: {mileage or 'Unlisted'}
+    - Engine: {engine_raw or 'Unlisted'}
+    - Price History: {price_history or 'None'}
+    - Dealer Description & Extracted Specs:
     {dealer_text[:6000]}
 
-    CRITICAL INSTRUCTIONS:
-    - NEVER output generic boilerplate (e.g., "2500 trucks generally offer 1,500 lbs payload", "buyers should verify...", "this configuration is generally well-suited").
-    - Focus ONLY on concrete facts from THIS specific listing: e.g., trim level highlights, factory tow packages mentioned, 5th wheel/gooseneck prep, exact rear axle ratios (3.73, 4.10, 4.30), engine generation, price drops, high/low mileage callouts, or noted modifications.
-    - If payload or axle ratio are not explicitly stated in the listing text, state "Payload/axle ratio unlisted by seller" and comment strictly on the vehicle's engine, price, mileage, or trim value.
+    CRITICAL INSTRUCTIONS FOR `ai_towing_summary`:
+    1. STRICTLY FORBIDDEN PHRASES: Do NOT output "provides ample power", "buyers should verify", "generally well-suited", or generic 2500 series facts.
+    2. Focus ONLY on concrete hardware, specs, and listing value: e.g. state exact engine (6.4L V8 / 6.7L Cummins), transmission (8-speed auto), drivetrain (4WD), factory tow equipment (integrated brake controller, 5th wheel prep, side steps, chrome wheels), mileage callout, or price value.
+    3. Keep `ai_towing_summary` under 25 words. Make it read like a sharp spec cheat-sheet (e.g., "6.4L V8 Hemi, 8-spd auto, 4WD Big Horn with 69.6k mi. Includes cab steps, Uconnect, and backup camera. Solid $33.9k price value.").
 
-    Extract and return strictly a valid JSON object with these keys:
+    Extract and return strictly a valid JSON object:
     {{
         "engine_type": "Gas" or "Diesel" or "Unknown",
         "axle_ratio": "Extract numerical rear ratio (e.g., 3.73, 4.10, 4.30) or null",
         "is_offroad_trim": 1 if (Power Wagon, Tremor, ZR2, AT4X) else 0,
         "payload_capacity_lbs": Integer or null,
         "has_towing_package": 1 if (heavy duty tow package, integrated brake controller, or max trailer tow explicitly mentioned) else 0,
-        "ai_towing_summary": "1-2 sharp, listing-specific sentences evaluating THIS exact truck's specs, condition, price value, or missing features. Zero generic filler."
+        "ai_towing_summary": "1-2 short, spec-heavy, non-generic sentences detailing hardware and value."
     }}
     """
     try:
@@ -301,7 +313,7 @@ def save_processed_truck(actual_vin, title, url, price_val, mileage_val, engine_
         ON CONFLICT(vin) DO UPDATE SET
             current_price = excluded.current_price,
             original_price = COALESCE(hd_truck_market.original_price, excluded.original_price),
-            mileage = excluded.mileage,
+            mileage = COALESCE(excluded.mileage, hd_truck_market.mileage),
             engine = excluded.engine,
             axle_ratio = excluded.axle_ratio,
             is_offroad_trim = excluded.is_offroad_trim,
