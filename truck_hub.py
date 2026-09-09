@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import math
 import sqlite3
 import requests
 from datetime import datetime
@@ -12,11 +13,44 @@ import anthropic
 ANTHROPIC_KEY = os.getenv('ANTHROPIC_API_KEY')
 ZENROWS_KEY = os.getenv('ZENROWS_API_KEY')
 
-def safe_int(val):
+def safe_int(val, max_val=2147483647):
     if not val:
         return None
     digits_only = re.sub(r'[^\d]', '', str(val))
-    return int(digits_only) if digits_only else None
+    if not digits_only:
+        return None
+    try:
+        num = int(digits_only)
+        return num if num <= max_val else None
+    except (ValueError, OverflowError):
+        return None
+
+def safe_db_int(val, default=None, max_val=2147483647):
+    if val is None:
+        return default
+    try:
+        digits_only = re.sub(r'[^\d-]', '', str(val))
+        if not digits_only or digits_only == '-':
+            return default
+        num = int(digits_only)
+        return num if abs(num) <= max_val else default
+    except (ValueError, OverflowError):
+        return default
+
+def calc_distance_from_sd(lat, lon):
+    if not lat or not lon:
+        return None
+    try:
+        lat1, lon1 = 32.7157, -117.1611  # San Diego 92101 center
+        lat2, lon2 = float(lat), float(lon)
+        R = 3958.8  # Earth radius in miles
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+        a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return round(R * c)
+    except Exception:
+        return None
 
 def is_valid_hd_truck(title):
     t = (title or "").lower()
@@ -73,27 +107,26 @@ def init_db():
             region_found TEXT,
             first_seen TEXT,
             last_seen TEXT,
-            airstream_readiness_score INTEGER DEFAULT 0
+            airstream_readiness_score INTEGER DEFAULT 0,
+            distance_miles INTEGER
         )
     ''')
-    try:
-        cursor.execute("ALTER TABLE hd_truck_market ADD COLUMN airstream_readiness_score INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    for col in ["airstream_readiness_score INTEGER DEFAULT 0", "distance_miles INTEGER"]:
+        try:
+            cursor.execute(f"ALTER TABLE hd_truck_market ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
 
 def purge_non_hd_records():
     conn = sqlite3.connect('hd_truck_market.db')
     cursor = conn.cursor()
-    
-    # Strip legacy markdown syntax from stored URLs
     cursor.execute("""
         UPDATE hd_truck_market 
         SET url = REPLACE(REPLACE(url, '[https://www.autotrader.com](', ''), ')', '') 
         WHERE url LIKE '%[%'
     """)
-
     cursor.execute('''
         DELETE FROM hd_truck_market 
         WHERE title IS NOT NULL 
@@ -113,7 +146,7 @@ def purge_non_hd_records():
 # ==========================================
 # 4. AIRSTREAM READINESS SCORE ALGORITHM
 # ==========================================
-def calculate_readiness_score(title, engine_str, is_offroad_trim, price, region_found, has_towing_pkg, axle_ratio, payload_lbs):
+def calculate_readiness_score(title, engine_str, is_offroad_trim, price, region_found, has_towing_pkg, axle_ratio, payload_lbs, distance_miles=None):
     if not is_valid_hd_truck(title):
         return 0
 
@@ -136,12 +169,18 @@ def calculate_readiness_score(title, engine_str, is_offroad_trim, price, region_
         elif price <= 50000:
             score += 5
 
-    if region_found == "SoCal Local":
-        score += 15
-    elif region_found == "Desert Southwest":
-        score += 10
-    elif region_found == "Texas Hub":
-        score += 2
+    if distance_miles is not None:
+        if distance_miles <= 150:
+            score += 15
+        elif distance_miles <= 350:
+            score += 8
+    else:
+        if region_found == "SoCal Local":
+            score += 15
+        elif region_found == "Desert Southwest":
+            score += 10
+        elif region_found == "Texas Hub":
+            score += 2
 
     if has_towing_pkg:
         score += 10
@@ -165,19 +204,26 @@ def calculate_readiness_score(title, engine_str, is_offroad_trim, price, region_
 # ==========================================
 # 5. CLAUDE AI ANALYSIS ENGINE
 # ==========================================
-def analyze_truck_with_claude(title, engine_raw, dealer_text):
+def analyze_truck_with_claude(title, engine_raw, dealer_text, price=None, mileage=None, price_history=None):
     if not ANTHROPIC_KEY:
         return None
 
     ai_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     prompt = f"""
-    You are an expert heavy-duty truck analyst for an Airstream trailer owner.
-    Target vehicle usage: Bumper-pull 2007 Airstream Safari 25' (7,000 lbs GVWR, ~1,100 lbs tongue weight).
-    Required payload footprint: ~1,500 lbs minimum.
+    You are a sharp, concise heavy-duty truck analyst for a buyer pulling a 2007 Airstream Safari 25' (7,000 lbs GVWR, ~1,100 lbs tongue weight).
+    Evaluate this specific listing based STRICTLY on the extracted data provided below.
 
-    Vehicle Title: {title}
-    Engine Mentioned: {engine_raw}
-    Dealer Description: {dealer_text[:6000]}
+    Vehicle: {title}
+    Price: ${price or 'Unlisted'} | Mileage: {mileage or 'Unlisted'}
+    Engine: {engine_raw or 'Unlisted'}
+    Price History Notes: {price_history or 'None'}
+    Extracted Specs & Seller Description:
+    {dealer_text[:6000]}
+
+    CRITICAL INSTRUCTIONS:
+    - NEVER output generic boilerplate (e.g., "2500 trucks generally offer 1,500 lbs payload", "buyers should verify...", "this configuration is generally well-suited").
+    - Focus ONLY on concrete facts from THIS specific listing: e.g., trim level highlights, factory tow packages mentioned, 5th wheel/gooseneck prep, exact rear axle ratios (3.73, 4.10, 4.30), engine generation, price drops, high/low mileage callouts, or noted modifications.
+    - If payload or axle ratio are not explicitly stated in the listing text, state "Payload/axle ratio unlisted by seller" and comment strictly on the vehicle's engine, price, mileage, or trim value.
 
     Extract and return strictly a valid JSON object with these keys:
     {{
@@ -185,8 +231,8 @@ def analyze_truck_with_claude(title, engine_raw, dealer_text):
         "axle_ratio": "Extract numerical rear ratio (e.g., 3.73, 4.10, 4.30) or null",
         "is_offroad_trim": 1 if (Power Wagon, Tremor, ZR2, AT4X) else 0,
         "payload_capacity_lbs": Integer or null,
-        "has_towing_package": 1 if (heavy duty tow package, integrated brake controller, or max trailer tow mentioned) else 0,
-        "ai_towing_summary": "1-2 sentence evaluation of payload, engine, and suitability for an 860-1100 lb tongue weight Airstream."
+        "has_towing_package": 1 if (heavy duty tow package, integrated brake controller, or max trailer tow explicitly mentioned) else 0,
+        "ai_towing_summary": "1-2 sharp, listing-specific sentences evaluating THIS exact truck's specs, condition, price value, or missing features. Zero generic filler."
     }}
     """
     try:
@@ -232,19 +278,29 @@ def save_raw_listing(clean_url, region_name):
         conn.commit()
     conn.close()
 
-def save_processed_truck(actual_vin, title, url, price_val, mileage_val, engine_str, ai_data, score, region_found, old_vin):
+def save_processed_truck(actual_vin, title, url, price_val, mileage_val, engine_str, ai_data, score, region_found, old_vin, orig_price_val=None, distance_miles=None):
     conn = sqlite3.connect('hd_truck_market.db')
     cursor = conn.cursor()
     today_str = datetime.now().strftime("%Y-%m-%d")
+
+    clean_price = safe_db_int(price_val, default=None)
+    clean_orig_price = safe_db_int(orig_price_val, default=clean_price)
+    clean_mileage = safe_db_int(mileage_val, default=None)
+    clean_offroad = safe_db_int(ai_data.get('is_offroad_trim'), default=0)
+    clean_payload = safe_db_int(ai_data.get('payload_capacity_lbs'), default=None)
+    clean_towing = safe_db_int(ai_data.get('has_towing_package'), default=0)
+    clean_score = safe_db_int(score, default=0)
+    clean_distance = safe_db_int(distance_miles, default=None)
 
     cursor.execute('''
         INSERT INTO hd_truck_market (
             vin, title, url, current_price, original_price, mileage, engine,
             axle_ratio, is_offroad_trim, payload_capacity_lbs, has_towing_package,
-            ai_towing_summary, ai_processed, region_found, first_seen, last_seen, airstream_readiness_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            ai_towing_summary, ai_processed, region_found, first_seen, last_seen, airstream_readiness_score, distance_miles
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
         ON CONFLICT(vin) DO UPDATE SET
             current_price = excluded.current_price,
+            original_price = COALESCE(hd_truck_market.original_price, excluded.original_price),
             mileage = excluded.mileage,
             engine = excluded.engine,
             axle_ratio = excluded.axle_ratio,
@@ -254,12 +310,13 @@ def save_processed_truck(actual_vin, title, url, price_val, mileage_val, engine_
             ai_towing_summary = excluded.ai_towing_summary,
             ai_processed = 1,
             last_seen = excluded.last_seen,
-            airstream_readiness_score = excluded.airstream_readiness_score
+            airstream_readiness_score = excluded.airstream_readiness_score,
+            distance_miles = COALESCE(excluded.distance_miles, hd_truck_market.distance_miles)
     ''', (
-        actual_vin, title, url, price_val, price_val, mileage_val, engine_str,
-        ai_data.get('axle_ratio'), ai_data.get('is_offroad_trim', 0),
-        ai_data.get('payload_capacity_lbs'), ai_data.get('has_towing_package', 0),
-        ai_data.get('ai_towing_summary'), region_found, today_str, today_str, score
+        actual_vin, title, url, clean_price, clean_orig_price, clean_mileage, engine_str,
+        ai_data.get('axle_ratio'), clean_offroad,
+        clean_payload, clean_towing,
+        ai_data.get('ai_towing_summary'), region_found, today_str, today_str, clean_score, clean_distance
     ))
 
     if old_vin != actual_vin and old_vin.startswith('TEMP_'):
