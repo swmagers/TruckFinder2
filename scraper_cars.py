@@ -1,17 +1,15 @@
 import re
+import json
 import sqlite3
 from bs4 import BeautifulSoup
 import truck_hub
 
-# ==========================================
-# CONFIGURATION
-# ==========================================
-BATCH_LIMIT = 20  # Max vehicle detail pages to fetch per run (20 * 25 credits = 500 max credits)
+BATCH_LIMIT = 20
 
 CARS_SEARCH_URLS = {
-    "SoCal Local": "https://www.cars.com/shopping/results/?stock_type=all&makes[]=ford&makes[]=ram&models[]=ford-f_250&models[]=ram-2500&zip=92101&maximum_distance=150",
-    "Desert Southwest": "https://www.cars.com/shopping/results/?stock_type=all&makes[]=ford&makes[]=ram&models[]=ford-f_250&models[]=ram-2500&zip=85001&maximum_distance=250",
-    "Texas Hub": "https://www.cars.com/shopping/results/?stock_type=all&makes[]=ford&makes[]=ram&models[]=ford-f_250&models[]=ram-2500&zip=75001&maximum_distance=250"
+    "SoCal Local": "[https://www.cars.com/shopping/results/?stock_type=all&makes](https://www.cars.com/shopping/results/?stock_type=all&makes)[]=ford&makes[]=ram&models[]=ford-f_250&models[]=ram-2500&zip=92101&maximum_distance=150",
+    "Desert Southwest": "[https://www.cars.com/shopping/results/?stock_type=all&makes](https://www.cars.com/shopping/results/?stock_type=all&makes)[]=ford&makes[]=ram&models[]=ford-f_250&models[]=ram-2500&zip=85001&maximum_distance=250",
+    "Texas Hub": "[https://www.cars.com/shopping/results/?stock_type=all&makes](https://www.cars.com/shopping/results/?stock_type=all&makes)[]=ford&makes[]=ram&models[]=ford-f_250&models[]=ram-2500&zip=75001&maximum_distance=250"
 }
 
 def sweep_cars():
@@ -27,7 +25,7 @@ def sweep_cars():
         for a in links:
             href = a.get('href')
             if href:
-                clean_url = "https://www.cars.com" + href.split('?')[0] if href.startswith('/') else href.split('?')[0]
+                clean_url = "[https://www.cars.com](https://www.cars.com)" + href.split('?')[0] if href.startswith('/') else href.split('?')[0]
                 truck_hub.save_raw_listing(clean_url, region)
                 found += 1
         print(f"  Found {found} vehicle links in {region}")
@@ -51,36 +49,109 @@ def process_cars_batch():
             continue
 
         soup = BeautifulSoup(html, 'html.parser')
+
+        # Deep Extraction Container
+        extracted_notes = []
+        json_ld_data = {}
+        lat, lon = None, None
+        price_history_str = ""
+
+        # 1. Parse JSON-LD Scripts
+        for script in soup.find_all('script', type='application/ld+json'):
+            try:
+                data = json.loads(script.string or '{}')
+                if isinstance(data, dict):
+                    if data.get('@type') in ['Car', 'Vehicle', 'Product']:
+                        json_ld_data = data
+                    elif data.get('@type') in ['AutoDealer', 'LocalBusiness']:
+                        geo = data.get('geo', {})
+                        lat, lon = geo.get('latitude'), geo.get('longitude')
+            except Exception:
+                pass
+
+        # 2. Parse __NEXT_DATA__ if available
+        next_data_script = soup.find('script', id='__NEXT_DATA__')
+        if next_data_script and next_data_script.string:
+            try:
+                next_json = json.loads(next_data_script.string)
+                props = next_json.get('props', {}).get('pageProps', {})
+                vdp = props.get('vehicle', {}) or props.get('vdp', {})
+                
+                if not lat and vdp.get('seller', {}).get('location'):
+                    loc = vdp['seller']['location']
+                    lat, lon = loc.get('latitude'), loc.get('longitude')
+
+                if vdp.get('priceHistory'):
+                    ph_list = [f"${p.get('price')} on {p.get('date')}" for p in vdp['priceHistory'] if p.get('price')]
+                    price_history_str = " -> ".join(ph_list)
+
+                if vdp.get('features'):
+                    extracted_notes.append("FEATURES & SPECS: " + ", ".join(vdp['features']))
+                if vdp.get('sellerNotes'):
+                    extracted_notes.append("SELLER NOTES: " + vdp['sellerNotes'])
+            except Exception:
+                pass
+
+        # Title
         title_el = soup.find('h1')
-        title = title_el.text.strip() if title_el else "Unknown Truck"
+        title = title_el.text.strip() if title_el else json_ld_data.get('name', 'Unknown Truck')
 
         if not truck_hub.is_valid_hd_truck(title):
             print(f"  Purging non-HD record: {title}")
             truck_hub.remove_listing(old_vin, url)
             continue
 
+        # VIN
         vin_match = re.search(r'([A-HJ-NPR-Z0-9]{17})', html)
-        actual_vin = vin_match.group(1) if vin_match else old_vin
+        actual_vin = vin_match.group(1) if vin_match else json_ld_data.get('vehicleIdentificationNumber', old_vin)
 
+        # Price
+        price_val = None
         price_el = soup.find(class_=re.compile(r'primary-price|price'))
-        price_val = truck_hub.safe_int(price_el.text) if price_el else None
+        if price_el:
+            price_val = truck_hub.safe_int(price_el.text)
+        elif json_ld_data.get('offers', {}).get('price'):
+            price_val = truck_hub.safe_int(json_ld_data['offers']['price'])
 
-        mileage_el = soup.find(string=re.compile(r'mi\.|miles', re.IGNORECASE))
-        mileage_val = truck_hub.safe_int(mileage_el) if mileage_el else None
+        # Mileage
+        mileage_val = None
+        mileage_el = soup.find(string=re.compile(r'([\d,]+)\s*(mi\.|miles)', re.IGNORECASE))
+        if mileage_el:
+            mileage_val = truck_hub.safe_int(mileage_el)
+        elif json_ld_data.get('mileageFromOdometer'):
+            m_data = json_ld_data['mileageFromOdometer']
+            mileage_val = truck_hub.safe_int(m_data.get('value') if isinstance(m_data, dict) else m_data)
 
-        engine_str = ""
-        engine_el = soup.find(string=re.compile(r'engine', re.IGNORECASE))
-        if engine_el and engine_el.parent:
-            engine_str = engine_el.parent.text.strip()
+        # Engine
+        engine_str = json_ld_data.get('vehicleEngine', {}).get('engineType', '')
+        if not engine_str:
+            engine_el = soup.find(string=re.compile(r'engine', re.IGNORECASE))
+            if engine_el and engine_el.parent:
+                engine_str = engine_el.parent.text.strip()
 
-        seller_notes = ""
-        notes_el = soup.find(class_=re.compile(r'sellers-notes|description'))
-        if notes_el:
-            seller_notes = notes_el.text.strip()
-        else:
-            seller_notes = soup.get_text()[:4000]
+        # Specs & Seller Notes from DOM
+        for sel in ['.sellers-notes', '.pdp-description', '.fancy-description', '[data-qa="seller-notes"]', '.features-and-specs']:
+            found_el = soup.select_one(sel)
+            if found_el:
+                extracted_notes.append(found_el.get_text(separator=" ").strip())
 
-        ai_data = truck_hub.analyze_truck_with_claude(title, engine_str, seller_notes)
+        if not extracted_notes:
+            extracted_notes.append(soup.get_text()[:4000])
+
+        full_dealer_context = "\n".join(extracted_notes)
+
+        # Calculate Distance to San Diego
+        distance_miles = truck_hub.calc_distance_from_sd(lat, lon)
+
+        # Claude Analysis
+        ai_data = truck_hub.analyze_truck_with_claude(
+            title=title,
+            engine_raw=engine_str,
+            dealer_text=full_dealer_context,
+            price=price_val,
+            mileage=mileage_val,
+            price_history=price_history_str
+        )
         if not ai_data:
             ai_data = {
                 "engine_type": "Unknown",
@@ -99,7 +170,8 @@ def process_cars_batch():
             region_found=region,
             has_towing_pkg=ai_data.get('has_towing_package', 0),
             axle_ratio=ai_data.get('axle_ratio'),
-            payload_lbs=ai_data.get('payload_capacity_lbs')
+            payload_lbs=ai_data.get('payload_capacity_lbs'),
+            distance_miles=distance_miles
         )
 
         truck_hub.save_processed_truck(
@@ -112,6 +184,8 @@ def process_cars_batch():
             ai_data=ai_data,
             score=score,
             region_found=region,
-            old_vin=old_vin
+            old_vin=old_vin,
+            distance_miles=distance_miles
         )
-        print(f"  Processed Cars.com VIN: {actual_vin} | Score: {score}/100 | {title}")
+        dist_str = f"{distance_miles} mi to SD" if distance_miles else region
+        print(f"  Processed Cars.com VIN: {actual_vin} | Score: {score}/100 | {dist_str} | {title}")
