@@ -12,13 +12,14 @@ def fetch_analytics():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
+    # Exclude invalid/unlisted zero prices and mileages from averages
     cursor.execute('''
         SELECT 
             COUNT(*),
-            ROUND(AVG(current_price), 0),
-            ROUND(AVG(mileage), 0),
+            ROUND(AVG(CASE WHEN current_price >= 5000 AND current_price <= 150000 THEN current_price END), 0),
+            ROUND(AVG(CASE WHEN mileage > 0 AND mileage <= 350000 THEN mileage END), 0),
             SUM(CASE WHEN airstream_readiness_score >= 75 THEN 1 ELSE 0 END),
-            ROUND(AVG(payload_capacity_lbs), 0)
+            ROUND(AVG(CASE WHEN payload_capacity_lbs >= 1000 THEN payload_capacity_lbs END), 0)
         FROM hd_truck_market 
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score > 0
     ''')
@@ -35,8 +36,8 @@ def fetch_analytics():
             END as make_model,
             COUNT(*) as count,
             ROUND(AVG(airstream_readiness_score), 1) as avg_score,
-            ROUND(AVG(current_price), 0) as avg_price,
-            ROUND(AVG(mileage), 0) as avg_miles
+            ROUND(AVG(CASE WHEN current_price >= 5000 AND current_price <= 150000 THEN current_price END), 0) as avg_price,
+            ROUND(AVG(CASE WHEN mileage > 0 AND mileage <= 350000 THEN mileage END), 0) as avg_miles
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score > 0
         GROUP BY make_model
@@ -49,7 +50,7 @@ def fetch_analytics():
             COALESCE(region_found, 'Unknown') as region,
             COUNT(*) as count,
             ROUND(AVG(airstream_readiness_score), 1) as avg_score,
-            ROUND(AVG(current_price), 0) as avg_price
+            ROUND(AVG(CASE WHEN current_price >= 5000 AND current_price <= 150000 THEN current_price END), 0) as avg_price
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score > 0
         GROUP BY region
@@ -66,8 +67,8 @@ def fetch_analytics():
             END as engine_type,
             COUNT(*) as count,
             ROUND(AVG(airstream_readiness_score), 1) as avg_score,
-            ROUND(AVG(current_price), 0) as avg_price,
-            ROUND(AVG(payload_capacity_lbs), 0) as avg_payload
+            ROUND(AVG(CASE WHEN current_price >= 5000 AND current_price <= 150000 THEN current_price END), 0) as avg_price,
+            ROUND(AVG(CASE WHEN payload_capacity_lbs >= 1000 THEN payload_capacity_lbs END), 0) as avg_payload
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score > 0
         GROUP BY engine_type
@@ -77,7 +78,9 @@ def fetch_analytics():
     cursor.execute('''
         SELECT title, original_price, current_price, (original_price - current_price) as price_drop, url, region_found
         FROM hd_truck_market
-        WHERE original_price > current_price AND current_price > 0
+        WHERE original_price > current_price 
+          AND current_price >= 5000 AND current_price <= 150000
+          AND original_price <= 150000
         ORDER BY price_drop DESC
         LIMIT 5
     ''')
@@ -104,7 +107,7 @@ def generate_dashboard():
     cursor = conn.cursor()
     cursor.execute('''
         SELECT title, current_price, mileage, engine, payload_capacity_lbs, 
-               airstream_readiness_score, ai_towing_summary, url, region_found, last_seen, distance_miles
+               airstream_readiness_score, ai_towing_summary, url, region_found, last_seen, distance_miles, bed_length
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score > 0
         ORDER BY airstream_readiness_score DESC, current_price ASC
@@ -149,7 +152,7 @@ def generate_dashboard():
                 <td><span style="text-decoration:line-through; color:#888;">${orig:,}</span></td>
                 <td style="color:#2e7d32; font-weight:bold;">${curr:,}</td>
                 <td><span style="background:#e6f4ea; color:#137333; padding:2px 8px; border-radius:12px; font-weight:bold;">-${drop:,}</span></td>
-                <td>{reg}</td>
+                <td>{reg or 'Unlisted'}</td>
             </tr>
             """
         price_drops_html = f"""
@@ -166,11 +169,12 @@ def generate_dashboard():
 
     rows_html = ""
     for t in trucks:
-        title, price, miles, engine, payload, score, summary, url, region, last_seen, dist_miles = t
-        price_str = f"${price:,}" if price else "N/A"
-        miles_str = f"{miles:,} mi" if miles else "N/A"
+        title, price, miles, engine, payload, score, summary, url, region, last_seen, dist_miles, bed_len = t
+        price_str = f"${price:,}" if (price and price >= 5000) else "Unlisted"
+        miles_str = f"{miles:,} mi" if (miles and miles > 0) else "Unlisted"
         payload_str = f"{payload:,} lbs" if payload else "N/A"
-        dist_str = f"{dist_miles} mi to SD" if dist_miles else region
+        dist_str = f"{dist_miles} mi to SD" if dist_miles else (region or "Unlisted")
+        bed_str = bed_len if bed_len else "Unknown"
         score_color = "#2e7d32" if score >= 75 else ("#f57c00" if score >= 60 else "#c62828")
 
         rows_html += f"""
@@ -180,6 +184,7 @@ def generate_dashboard():
             <td>{price_str}</td>
             <td>{miles_str}</td>
             <td>{engine or 'Unknown'}</td>
+            <td>{bed_str}</td>
             <td>{payload_str}</td>
             <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">{dist_str}</span></td>
             <td style="font-size:0.9em; color:#444; line-height:1.4;">{summary or ''}</td>
@@ -289,9 +294,10 @@ def generate_dashboard():
                     <th>Price</th>
                     <th>Mileage</th>
                     <th>Engine</th>
+                    <th>Bed Length</th>
                     <th>Payload</th>
                     <th>Location / Dist</th>
-                    <th>Claude AI Listing Analysis</th>
+                    <th>Claude AI Listing Specs</th>
                 </tr>
             </thead>
             <tbody>
@@ -344,7 +350,7 @@ def generate_dashboard():
 """
     with open("index.html", "w") as f:
         f.write(html_content)
-    print("Dashboard index.html generated with deep analytics and distance metrics.")
+    print("Dashboard index.html generated with clean math bounds and bed length column.")
 
 def send_email_digest():
     user = os.getenv('EMAIL_USER')
@@ -358,7 +364,7 @@ def send_email_digest():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT title, current_price, mileage, engine, airstream_readiness_score, ai_towing_summary, url, region_found, distance_miles
+        SELECT title, current_price, mileage, engine, airstream_readiness_score, ai_towing_summary, url, region_found, distance_miles, bed_length
         FROM hd_truck_market
         WHERE ai_processed = 1 AND title IS NOT NULL AND airstream_readiness_score >= 65
         ORDER BY airstream_readiness_score DESC, current_price ASC
@@ -379,16 +385,17 @@ def send_email_digest():
 
     items_html = ""
     for t in top_picks:
-        title, price, miles, engine, score, summary, url, region, dist_miles = t
-        price_str = f"${price:,}" if price else "N/A"
-        miles_str = f"{miles:,} mi" if miles else "N/A"
-        dist_str = f"{dist_miles} mi to SD" if dist_miles else region
+        title, price, miles, engine, score, summary, url, region, dist_miles, bed_len = t
+        price_str = f"${price:,}" if (price and price >= 5000) else "Unlisted"
+        miles_str = f"{miles:,} mi" if (miles and miles > 0) else "Unlisted"
+        dist_str = f"{dist_miles} mi to SD" if dist_miles else (region or "Unlisted")
+        bed_str = f" | Bed: {bed_len}" if bed_len and bed_len != "Unknown" else ""
         
         items_html += f"""
         <div style="border-left: 4px solid #1a73e8; padding-left: 12px; margin-bottom: 20px;">
             <h3 style="margin:0 0 5px 0;"><a href="{url}" style="color:#1a73e8; text-decoration:none;">{title}</a></h3>
             <p style="margin:0 0 5px 0; font-weight:bold; color:#333;">
-                Score: <span style="color:#2e7d32;">{score}/100</span> | Price: {price_str} | Odometer: {miles_str} | Dist: {dist_str}
+                Score: <span style="color:#2e7d32;">{score}/100</span> | Price: {price_str} | Odometer: {miles_str} | Dist: {dist_str}{bed_str}
             </p>
             <p style="margin:0; font-size:0.9em; color:#555;"><em>"{summary}"</em></p>
         </div>
@@ -402,7 +409,7 @@ def send_email_digest():
     html_body = f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.5;">
-        <h2>HD Truck Market Update</h2>
+        <h2>HD Truck Market Executive Update</h2>
         
         <p><strong>Market Overview ({data['total_trucks']} total trucks tracked):</strong></p>
         <ul>
