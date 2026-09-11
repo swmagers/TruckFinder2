@@ -100,20 +100,22 @@ def process_cars_batch():
         vin_match = re.search(r'([A-HJ-NPR-Z0-9]{17})', html)
         actual_vin = vin_match.group(1) if vin_match else json_ld_data.get('vehicleIdentificationNumber', old_vin)
 
+        # Bounded Price Extraction
         price_val = None
         price_el = soup.find(class_=re.compile(r'primary-price|price'))
         if price_el:
-            price_val = truck_hub.safe_int(price_el.text)
-        elif json_ld_data.get('offers', {}).get('price'):
-            price_val = truck_hub.safe_int(json_ld_data['offers']['price'])
+            price_val = truck_hub.safe_price(price_el.text)
+        if not price_val and json_ld_data.get('offers', {}).get('price'):
+            price_val = truck_hub.safe_price(json_ld_data['offers']['price'])
 
+        # Bounded Mileage Extraction
         mileage_val = None
         mileage_el = soup.find(string=re.compile(r'([\d,]+)\s*(mi\.|miles)', re.IGNORECASE))
         if mileage_el:
-            mileage_val = truck_hub.safe_int(mileage_el)
-        elif json_ld_data.get('mileageFromOdometer'):
+            mileage_val = truck_hub.safe_mileage(mileage_el)
+        if not mileage_val and json_ld_data.get('mileageFromOdometer'):
             m_data = json_ld_data['mileageFromOdometer']
-            mileage_val = truck_hub.safe_int(m_data.get('value') if isinstance(m_data, dict) else m_data)
+            mileage_val = truck_hub.safe_mileage(m_data.get('value') if isinstance(m_data, dict) else m_data)
 
         engine_str = json_ld_data.get('vehicleEngine', {}).get('engineType', '')
         if not engine_str:
@@ -127,17 +129,21 @@ def process_cars_batch():
                 extracted_notes.append(found_el.get_text(separator=" ").strip())
 
         if not extracted_notes:
-            extracted_notes.append(soup.get_text()[:4000])
+            extracted_notes.append(soup.get_text()[:5000])
 
         full_dealer_context = "\n".join(extracted_notes)
 
-        # Fallback text regex for mileage
+        # Mileage Fallback Regex on seller notes (e.g. "at 69,622 miles")
         if not mileage_val and full_dealer_context:
-            m_match = re.search(r'([\d,]{2,7})\s*(?:miles|mile|mi\b)', full_dealer_context, re.IGNORECASE)
+            m_match = re.search(r'([\d,]{2,6})\s*(?:miles|mile|mi\b)', full_dealer_context, re.IGNORECASE)
             if m_match:
-                mileage_val = truck_hub.safe_int(m_match.group(1))
+                mileage_val = truck_hub.safe_mileage(m_match.group(1))
 
-        distance_miles = truck_hub.calc_distance_from_sd(lat, lon)
+        # Detect Bed Length and Tow Package from Text
+        bed_length_val = truck_hub.detect_bed_length(full_dealer_context + " " + title)
+        has_tow_pkg = truck_hub.detect_tow_package(full_dealer_context)
+
+        distance_miles = truck_hub.calc_distance_from_sd(lat, lon, region_found=region)
 
         ai_data = truck_hub.analyze_truck_with_claude(
             title=title,
@@ -153,9 +159,13 @@ def process_cars_batch():
                 "axle_ratio": None,
                 "is_offroad_trim": 0,
                 "payload_capacity_lbs": None,
-                "has_towing_package": 0,
+                "has_towing_package": has_tow_pkg,
+                "bed_length": bed_length_val,
                 "ai_towing_summary": "AI processing unverified."
             }
+        else:
+            if not ai_data.get('has_towing_package'):
+                ai_data['has_towing_package'] = has_tow_pkg
 
         score = truck_hub.calculate_readiness_score(
             title=title,
@@ -180,7 +190,8 @@ def process_cars_batch():
             score=score,
             region_found=region,
             old_vin=old_vin,
-            distance_miles=distance_miles
+            distance_miles=distance_miles,
+            bed_length_val=bed_length_val
         )
         dist_str = f"{distance_miles} mi to SD" if distance_miles else region
-        print(f"  Processed Cars.com VIN: {actual_vin} | Score: {score}/100 | {dist_str} | Odo: {mileage_val or 'N/A'} | {title}")
+        print(f"  Processed Cars.com VIN: {actual_vin} | Score: {score}/100 | {dist_str} | Price: ${price_val or 0} | Odo: {mileage_val or 'N/A'} | {bed_length_val} | {title}")
