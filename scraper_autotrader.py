@@ -21,7 +21,6 @@ def sweep_autotrader():
             continue
         soup = BeautifulSoup(html, 'html.parser')
         
-        # Tightened selector: Find listing cards and ensure card text includes HD keywords before enqueueing
         cards = soup.find_all(attrs={"data-cmp": re.compile(r'inventoryListing', re.I)})
         if not cards:
             cards = soup.find_all('div', class_=re.compile(r'inventory-listing|item-card', re.I))
@@ -38,7 +37,6 @@ def sweep_autotrader():
                         truck_hub.save_raw_listing(clean_url, region)
                         found += 1
         else:
-            # Fallback strict link sweep requiring numeric ID and parent HD text
             links = soup.find_all('a', href=re.compile(r'/cars-for-sale/vehicle/\d+'))
             for a in links:
                 href = a.get('href')
@@ -97,24 +95,23 @@ def process_autotrader_batch():
         vin_match = re.search(r'([A-HJ-NPR-Z0-9]{17})', html)
         actual_vin = vin_match.group(1) if vin_match else json_ld_data.get('vehicleIdentificationNumber', old_vin)
 
-        # Price
+        # Bounded Price Extraction
         price_val = None
         price_el = soup.find(class_=re.compile(r'first-price|price'))
         if price_el:
-            price_val = truck_hub.safe_int(price_el.text)
-        elif json_ld_data.get('offers', {}).get('price'):
-            price_val = truck_hub.safe_int(json_ld_data['offers']['price'])
+            price_val = truck_hub.safe_price(price_el.text)
+        if not price_val and json_ld_data.get('offers', {}).get('price'):
+            price_val = truck_hub.safe_price(json_ld_data['offers']['price'])
 
-        # Mileage with Text Regex Fallback
+        # Bounded Mileage Extraction
         mileage_val = None
         mileage_el = soup.find(string=re.compile(r'([\d,]+)\s*miles', re.IGNORECASE))
         if mileage_el:
-            mileage_val = truck_hub.safe_int(mileage_el)
-        elif json_ld_data.get('mileageFromOdometer'):
+            mileage_val = truck_hub.safe_mileage(mileage_el)
+        if not mileage_val and json_ld_data.get('mileageFromOdometer'):
             m_data = json_ld_data['mileageFromOdometer']
-            mileage_val = truck_hub.safe_int(m_data.get('value') if isinstance(m_data, dict) else m_data)
+            mileage_val = truck_hub.safe_mileage(m_data.get('value') if isinstance(m_data, dict) else m_data)
 
-        # Description / Seller Specs
         if json_ld_data.get('description'):
             extracted_notes.append(json_ld_data['description'])
         
@@ -123,11 +120,15 @@ def process_autotrader_batch():
 
         full_dealer_context = "\n".join(extracted_notes)
 
-        # Fallback text regex for mileage (e.g., "At 69,622 miles")
+        # Mileage Fallback Regex on body text
         if not mileage_val and full_dealer_context:
-            m_match = re.search(r'([\d,]{2,7})\s*(?:miles|mile|mi\b)', full_dealer_context, re.IGNORECASE)
+            m_match = re.search(r'([\d,]{2,6})\s*(?:miles|mile|mi\b)', full_dealer_context, re.IGNORECASE)
             if m_match:
-                mileage_val = truck_hub.safe_int(m_match.group(1))
+                mileage_val = truck_hub.safe_mileage(m_match.group(1))
+
+        # Detect Bed Length & Tow Package
+        bed_length_val = truck_hub.detect_bed_length(full_dealer_context + " " + title)
+        has_tow_pkg = truck_hub.detect_tow_package(full_dealer_context)
 
         # Engine
         engine_str = json_ld_data.get('vehicleEngine', {}).get('engineType', '')
@@ -136,7 +137,7 @@ def process_autotrader_batch():
             if engine_el and engine_el.parent:
                 engine_str = engine_el.parent.text.strip()
 
-        distance_miles = truck_hub.calc_distance_from_sd(lat, lon)
+        distance_miles = truck_hub.calc_distance_from_sd(lat, lon, region_found=region)
 
         ai_data = truck_hub.analyze_truck_with_claude(
             title=title,
@@ -151,9 +152,13 @@ def process_autotrader_batch():
                 "axle_ratio": None,
                 "is_offroad_trim": 0,
                 "payload_capacity_lbs": None,
-                "has_towing_package": 0,
+                "has_towing_package": has_tow_pkg,
+                "bed_length": bed_length_val,
                 "ai_towing_summary": "AI processing unverified."
             }
+        else:
+            if not ai_data.get('has_towing_package'):
+                ai_data['has_towing_package'] = has_tow_pkg
 
         score = truck_hub.calculate_readiness_score(
             title=title,
@@ -178,7 +183,8 @@ def process_autotrader_batch():
             score=score,
             region_found=region,
             old_vin=old_vin,
-            distance_miles=distance_miles
+            distance_miles=distance_miles,
+            bed_length_val=bed_length_val
         )
         dist_str = f"{distance_miles} mi to SD" if distance_miles else region
-        print(f"  Processed Autotrader VIN: {actual_vin} | Score: {score}/100 | {dist_str} | Odo: {mileage_val or 'N/A'} | {title}")
+        print(f"  Processed Autotrader VIN: {actual_vin} | Score: {score}/100 | {dist_str} | Price: ${price_val or 0} | Odo: {mileage_val or 'N/A'} | {bed_length_val} | {title}")
