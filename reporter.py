@@ -6,13 +6,12 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 DB_NAME = 'hd_truck_market.db'
-DASHBOARD_URL = "[https://swmagers.github.io/TruckFinder2/](https://swmagers.github.io/TruckFinder2/)"
+DASHBOARD_URL = "https://swmagers.github.io/TruckFinder2/"
 
 def fetch_analytics():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # Exclude invalid/unlisted zero prices and mileages from averages
     cursor.execute('''
         SELECT 
             COUNT(*),
@@ -191,14 +190,14 @@ def generate_dashboard():
         </tr>
         """
 
-    model_labels = [m[0] for m in data["model_stats"]]
-    model_scores = [m[2] for m in data["model_stats"]]
+    model_labels = [str(m[0]) for m in data["model_stats"]] if data["model_stats"] else []
+    model_scores = [float(m[2]) if m[2] is not None else 0 for m in data["model_stats"]] if data["model_stats"] else []
 
-    region_labels = [r[0] for r in data["region_stats"]]
-    region_counts = [r[1] for r in data["region_stats"]]
+    region_labels = [str(r[0]) for r in data["region_stats"]] if data["region_stats"] else []
+    region_counts = [int(r[1]) if r[1] is not None else 0 for r in data["region_stats"]] if data["region_stats"] else []
 
-    engine_labels = [e[0] for e in data["engine_stats"]]
-    engine_counts = [e[1] for e in data["engine_stats"]]
+    engine_labels = [str(e[0]) for e in data["engine_stats"]] if data["engine_stats"] else []
+    engine_counts = [int(e[1]) if e[1] is not None else 0 for e in data["engine_stats"]] if data["engine_stats"] else []
 
     html_content = f"""<!DOCTYPE html>
 <html>
@@ -206,7 +205,7 @@ def generate_dashboard():
     <title>Airstream Safari HD Truck Dashboard</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; background: #f8f9fa; color: #333; }}
         h1 {{ margin-bottom: 2px; }}
@@ -220,7 +219,7 @@ def generate_dashboard():
         .sub {{ font-size: 0.5em; color: #888; font-weight: normal; }}
         .kpi-card {{ background: #1a73e8; color: white; min-width: 150px; }}
         .charts-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }}
-        .chart-container {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .chart-container {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; height: 280px; }}
         .section-container {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 25px; overflow-x: auto; }}
         table {{ width: 100%; border-collapse: collapse; text-align: left; }}
         th, td {{ padding: 10px 12px; border-bottom: 1px solid #eee; }}
@@ -241,7 +240,7 @@ def generate_dashboard():
         <div class="card kpi-card" style="background:#2e7d32;">
             <div class="card-title" style="color:rgba(255,255,255,0.8);">High Match Count</div>
             <div class="card-metric">{data["high_score_cnt"]}</div>
-            <div class="card-sub" style="color:rgba(255,255,255,0.9);">Score $\ge$ 75/100</div>
+            <div class="card-sub" style="color:rgba(255,255,255,0.9);">Score &ge; 75/100</div>
         </div>
         <div class="card">
             <div class="card-title">Average HD Price</div>
@@ -272,15 +271,21 @@ def generate_dashboard():
     <div class="charts-grid">
         <div class="chart-container">
             <h2>Readiness Score by Make/Model</h2>
-            <canvas id="modelScoreChart"></canvas>
+            <div style="position: relative; height: 210px; width: 100%;">
+                <canvas id="modelScoreChart"></canvas>
+            </div>
         </div>
         <div class="chart-container">
             <h2>Regional Inventory Volume</h2>
-            <canvas id="regionChart"></canvas>
+            <div style="position: relative; height: 210px; width: 100%;">
+                <canvas id="regionChart"></canvas>
+            </div>
         </div>
         <div class="chart-container">
             <h2>Engine Mix (Gas vs Diesel)</h2>
-            <canvas id="engineMixChart"></canvas>
+            <div style="position: relative; height: 210px; width: 100%;">
+                <canvas id="engineMixChart"></canvas>
+            </div>
         </div>
     </div>
 
@@ -307,42 +312,49 @@ def generate_dashboard():
     </div>
 
     <script>
-        new Chart(document.getElementById('modelScoreChart'), {{
-            type: 'bar',
-            data: {{
-                labels: {json.dumps(model_labels)},
-                datasets: [{{
-                    label: 'Avg Airstream Readiness Score',
-                    data: {json.dumps(model_scores)},
-                    backgroundColor: '#1a73e8'
-                }}]
-            }},
-            options: {{ responsive: true, scales: {{ y: {{ min: 0, max: 100 }} }} }}
-        }});
+        document.addEventListener('DOMContentLoaded', function() {{
+            if (typeof Chart === 'undefined') {{
+                console.error('Chart.js library failed to load.');
+                return;
+            }}
 
-        new Chart(document.getElementById('regionChart'), {{
-            type: 'bar',
-            data: {{
-                labels: {json.dumps(region_labels)},
-                datasets: [{{
-                    label: 'Vehicle Count',
-                    data: {json.dumps(region_counts)},
-                    backgroundColor: '#f57c00'
-                }}]
-            }},
-            options: {{ responsive: true }}
-        }});
+            new Chart(document.getElementById('modelScoreChart'), {{
+                type: 'bar',
+                data: {{
+                    labels: {json.dumps(model_labels)},
+                    datasets: [{{
+                        label: 'Avg Readiness Score',
+                        data: {json.dumps(model_scores)},
+                        backgroundColor: '#1a73e8'
+                    }}]
+                }},
+                options: {{ responsive: true, maintainAspectRatio: false, scales: {{ y: {{ min: 0, max: 100 }} }} }}
+            }});
 
-        new Chart(document.getElementById('engineMixChart'), {{
-            type: 'doughnut',
-            data: {{
-                labels: {json.dumps(engine_labels)},
-                datasets: [{{
-                    data: {json.dumps(engine_counts)},
-                    backgroundColor: ['#2e7d32', '#1a73e8', '#9e9e9e']
-                }}]
-            }},
-            options: {{ responsive: true }}
+            new Chart(document.getElementById('regionChart'), {{
+                type: 'bar',
+                data: {{
+                    labels: {json.dumps(region_labels)},
+                    datasets: [{{
+                        label: 'Vehicle Count',
+                        data: {json.dumps(region_counts)},
+                        backgroundColor: '#f57c00'
+                    }}]
+                }},
+                options: {{ responsive: true, maintainAspectRatio: false }}
+            }});
+
+            new Chart(document.getElementById('engineMixChart'), {{
+                type: 'doughnut',
+                data: {{
+                    labels: {json.dumps(engine_labels)},
+                    datasets: [{{
+                        data: {json.dumps(engine_counts)},
+                        backgroundColor: ['#2e7d32', '#1a73e8', '#9e9e9e']
+                    }}]
+                }},
+                options: {{ responsive: true, maintainAspectRatio: false }}
+            }});
         }});
     </script>
 </body>
@@ -350,7 +362,7 @@ def generate_dashboard():
 """
     with open("index.html", "w") as f:
         f.write(html_content)
-    print("Dashboard index.html generated with clean math bounds and bed length column.")
+    print("Dashboard index.html generated with DOM-ready Chart.js rendering.")
 
 def send_email_digest():
     user = os.getenv('EMAIL_USER')
