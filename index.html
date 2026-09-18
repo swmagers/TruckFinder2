@@ -4,7 +4,7 @@
     <title>Airstream Safari HD Truck Dashboard</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; background: #f8f9fa; color: #333; }
         h1 { margin-bottom: 2px; }
@@ -18,7 +18,7 @@
         .sub { font-size: 0.5em; color: #888; font-weight: normal; }
         .kpi-card { background: #1a73e8; color: white; min-width: 150px; }
         .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }
-        .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; height: 280px; }
         .section-container { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 25px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
         th, td { padding: 10px 12px; border-bottom: 1px solid #eee; }
@@ -33,13 +33,13 @@
     <div class="grid">
         <div class="card kpi-card">
             <div class="card-title" style="color:rgba(255,255,255,0.8);">Total Listings</div>
-            <div class="card-metric">150</div>
+            <div class="card-metric">163</div>
             <div class="card-sub" style="color:rgba(255,255,255,0.9);">Tracked Vehicles</div>
         </div>
         <div class="card kpi-card" style="background:#2e7d32;">
             <div class="card-title" style="color:rgba(255,255,255,0.8);">High Match Count</div>
-            <div class="card-metric">44</div>
-            <div class="card-sub" style="color:rgba(255,255,255,0.9);">Score $\ge$ 75/100</div>
+            <div class="card-metric">53</div>
+            <div class="card-sub" style="color:rgba(255,255,255,0.9);">Score &ge; 75/100</div>
         </div>
         <div class="card">
             <div class="card-title">Average HD Price</div>
@@ -48,7 +48,7 @@
         </div>
         <div class="card">
             <div class="card-title">Average Mileage</div>
-            <div class="card-metric">60,945 <span class="sub">mi</span></div>
+            <div class="card-metric">59,577 <span class="sub">mi</span></div>
             <div class="card-sub">Odometer Average</div>
         </div>
         <div class="card">
@@ -62,14 +62,14 @@
         
         <div class="card">
             <div class="card-title">RAM 2500</div>
-            <div class="card-metric" style="color:#1a73e8;">69.2 <span class="sub">/100 avg</span></div>
-            <div class="card-sub">Count: <strong>82</strong> | Avg: <strong>$43,592</strong></div>
+            <div class="card-metric" style="color:#1a73e8;">70.2 <span class="sub">/100 avg</span></div>
+            <div class="card-sub">Count: <strong>90</strong> | Avg: <strong>$43,592</strong></div>
         </div>
         
         <div class="card">
             <div class="card-title">Ford F-250</div>
-            <div class="card-metric" style="color:#1a73e8;">62.6 <span class="sub">/100 avg</span></div>
-            <div class="card-sub">Count: <strong>66</strong> | Avg: <strong>$45,540</strong></div>
+            <div class="card-metric" style="color:#1a73e8;">64.2 <span class="sub">/100 avg</span></div>
+            <div class="card-sub">Count: <strong>71</strong> | Avg: <strong>$45,540</strong></div>
         </div>
         
         <div class="card">
@@ -83,15 +83,15 @@
         
         <div class="card">
             <div class="card-title">Diesel Engine Option</div>
-            <div class="card-metric" style="color:#2e7d32;">64.0 <span class="sub">/100 score</span></div>
-            <div class="card-sub">Count: <strong>53</strong> | Avg Price: <strong>$44,726</strong></div>
+            <div class="card-metric" style="color:#2e7d32;">64.6 <span class="sub">/100 score</span></div>
+            <div class="card-sub">Count: <strong>59</strong> | Avg Price: <strong>$44,726</strong></div>
             <div class="card-sub">Avg Payload: <strong>N/A</strong></div>
         </div>
         
         <div class="card">
             <div class="card-title">Gas Engine Option</div>
-            <div class="card-metric" style="color:#2e7d32;">78.1 <span class="sub">/100 score</span></div>
-            <div class="card-sub">Count: <strong>45</strong> | Avg Price: <strong>$43,902</strong></div>
+            <div class="card-metric" style="color:#2e7d32;">80.0 <span class="sub">/100 score</span></div>
+            <div class="card-sub">Count: <strong>52</strong> | Avg Price: <strong>$43,902</strong></div>
             <div class="card-sub">Avg Payload: <strong>N/A</strong></div>
         </div>
         
@@ -127,15 +127,21 @@
     <div class="charts-grid">
         <div class="chart-container">
             <h2>Readiness Score by Make/Model</h2>
-            <canvas id="modelScoreChart"></canvas>
+            <div style="position: relative; height: 210px; width: 100%;">
+                <canvas id="modelScoreChart"></canvas>
+            </div>
         </div>
         <div class="chart-container">
             <h2>Regional Inventory Volume</h2>
-            <canvas id="regionChart"></canvas>
+            <div style="position: relative; height: 210px; width: 100%;">
+                <canvas id="regionChart"></canvas>
+            </div>
         </div>
         <div class="chart-container">
             <h2>Engine Mix (Gas vs Diesel)</h2>
-            <canvas id="engineMixChart"></canvas>
+            <div style="position: relative; height: 210px; width: 100%;">
+                <canvas id="engineMixChart"></canvas>
+            </div>
         </div>
     </div>
 
@@ -157,6 +163,54 @@
             </thead>
             <tbody>
                 
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">95/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/ee67f524-82d1-44cd-a4bb-35b67da02d2d/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2025 RAM 2500 Big Horn Crew Cab 4x4 6'4' Box</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>HEMI 6.4L V-8 VVT variable valve control, regular unleaded, engi engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">75 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L HEMI V8, 4WD Big Horn, 6'4" box. Factory tow hitch/hooks, no confirmed brake controller. Price/mileage unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">95/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/4834a522-093b-4b9f-974b-28d4f9ecc194/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 Ford F-250 XL</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>7.3L V8 PFI SOHC 16V Federal 405hp engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">75 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">7.3L V8 gas, 10-spd auto, 4WD F-250 XL with tow hitch. Price and mileage unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">95/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/532bdd51-ddc6-4c28-8b71-197a8b7f609f/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2021 Ford F-250 XLT</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>6.2L V-8 variable valve control, regular gasoline, engine with 3 engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">75 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.2L V8 gas, RWD, XLT trim with tow hitch and hooks. No brake controller or max-tow package specified.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">95/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/4b1db14e-d5d1-47d4-a416-626d67ec9dec/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Certified 2025 Ford F-250 XLT</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>7.3L V8 PFI SOHC 16V Federal 405hp engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">75 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">7.3L V8 gas, 4WD, automatic. Tow hitch and hooks equipped, but no brake controller or max-tow package confirmed. Price/mileage unlisted.</td>
+        </tr>
+        
         <tr>
             <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">95/100</td>
             <td><a href="https://www.autotrader.com/cars-for-sale/vehicle/785017624" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2022 RAM 2500 Tradesman AWD/4WD</a></td>
@@ -215,6 +269,30 @@
             <td>N/A</td>
             <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">SoCal Local</span></td>
             <td style="font-size:0.9em; color:#444; line-height:1.4;">The 6.4L V-8 gas engine provides strong power for towing, but payload capacity and towing package details are not specified, making it difficult to confirm suitability for the 860-1100 lb tongue weight of the Airstream Safari without further verification of the truck's specific configuration.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">88/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/7e3e6007-d3a4-4a2a-87d7-c7eb119c6198/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 RAM 2500 Tradesman Crew Cab 4x4 6'4' Box</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>HEMI 6.4L V-8 VVT variable valve control, regular gasoline, engi engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">350 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L HEMI V8, 4WD Tradesman, 6'4" box. Factory tow hitch included; no brake controller or payload specs listed.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">88/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/4664551d-93c9-4666-ae27-02d4387a7274/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 RAM 2500 Big Horn</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>6.4L V8 16V MPFI OHV engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">350 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L V8, 8-spd auto, 4WD Big Horn. Tow hitch and backup camera included; no brake controller or payload specs listed.</td>
         </tr>
         
         <tr>
@@ -363,6 +441,42 @@
         
         <tr>
             <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">80/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/6a455883-2039-4c97-af13-9a295e019bfa/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">New 2026 RAM 2500 Tradesman</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>Regular Gasoline V-8 6.4 L/392 engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">1200 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L V8/392, automatic, 4WD Tradesman. Tow hitch and hooks included. Price and mileage unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">80/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/ec9ad3e1-d88a-4c7e-a262-a2e2d889f810/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2022 RAM 2500 Laramie</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>6.7L I6 24V DDI OHV Turbo Diesel engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">75 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L I6 Cummins diesel, 4WD Laramie with factory tow hitch. Well above the 8,100 lb tow requirement.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">80/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/c6d718b0-9b38-4914-bea2-86202ecb05a2/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 RAM 2500 Tradesman Crew Cab 4x4 6'4' Box</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>HEMI 6.4L V-8 VVT variable valve control, regular gasoline, engi engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">Unlisted</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L HEMI V8, 8-spd auto, 4WD Tradesman with tow hitch and hooks. Price and mileage unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">80/100</td>
             <td><a href="https://www.cars.com/vehicledetail/c6d718b0-9b38-4914-bea2-86202ecb05a2/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 RAM 2500 Tradesman Crew Cab 4x4 6'4' Box</a></td>
             <td>Unlisted</td>
             <td>Unlisted</td>
@@ -387,14 +501,14 @@
         
         <tr>
             <td style="font-weight:bold; color:#2e7d32; font-size:1.1em;">80/100</td>
-            <td><a href="https://www.cars.com/vehicledetail/cb3828ab-28d9-4a45-9257-16e1540163a7/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2025 RAM 2500 Tradesman</a></td>
+            <td><a href="https://www.cars.com/vehicledetail/5849d982-6449-48db-ab90-0c9de4193e8e/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2022 RAM 2500 Laramie</a></td>
             <td>Unlisted</td>
             <td>Unlisted</td>
             <td>6.4L V8 16V MPFI OHV engine</td>
             <td>Unknown</td>
             <td>N/A</td>
             <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">1200 mi to SD</span></td>
-            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L V8, 8-spd auto, 4WD Tradesman with tow hitch, backup camera, nav. Price and mileage unlisted.</td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L V8, 8-spd auto, 4WD Laramie with factory tow hitch. Leather, nav, adaptive cruise. Price/mileage unlisted.</td>
         </tr>
         
         <tr>
@@ -686,6 +800,30 @@
         </tr>
         
         <tr>
+            <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">73/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/397b7440-ee1a-43b3-9e48-73c83931f1d6/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2021 Ford F-250 XLT</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>Powerstroke 6.7L V-8 diesel direct injection, intercooled turbo, engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">350 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L Powerstroke diesel, 10-speed auto, 4WD XLT. Factory tow hitch, tow hooks, backup camera. Price and mileage unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">73/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/1ac3440d-5afa-4bb6-a021-0248effc5f49/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2020 RAM 2500 Big Horn Crew Cab 4x4 6'4' Box</a></td>
+            <td>Unlisted</td>
+            <td>50,000 mi</td>
+            <td>Cummins 6.7L I-6 diesel direct injection, VVT intercooled turbo, engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">350 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L Cummins I-6 diesel, 4x4 Big Horn, 6'4" box, 50k mi. Tow hitch/hooks equipped for Airstream 25' duty.</td>
+        </tr>
+        
+        <tr>
             <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">72/100</td>
             <td><a href="https://www.autotrader.com/cars-for-sale/vehicle/767568430" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">New 2026 Ford F250 XL AWD/4WD</a></td>
             <td>$59,330</td>
@@ -743,18 +881,6 @@
             <td>N/A</td>
             <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">Unlisted</span></td>
             <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L V8 Hemi, 8-spd auto, RWD Tradesman regular cab 8' box. Tow hitch/hooks standard; price and mileage unlisted.</td>
-        </tr>
-        
-        <tr>
-            <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">70/100</td>
-            <td><a href="https://www.cars.com/vehicledetail/c6d718b0-9b38-4914-bea2-86202ecb05a2/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 RAM 2500 Tradesman Crew Cab 4x4 6'4' Box</a></td>
-            <td>Unlisted</td>
-            <td>Unlisted</td>
-            <td>HEMI 6.4L V-8 VVT variable valve control, regular gasoline, engi engine</td>
-            <td>Unknown</td>
-            <td>N/A</td>
-            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">Unlisted</span></td>
-            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.4L HEMI V8, 8-spd auto, 4WD Tradesman w/ tow hitch, tow hooks. Price unlisted; mileage data invalid.</td>
         </tr>
         
         <tr>
@@ -999,6 +1125,18 @@
         
         <tr>
             <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">65/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/f94e8f8e-0e33-4289-8853-a4672cd97a02/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2025 Ford F-250 XLT</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>6.7L V8 32V DDI OHV Turbo Diesel engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">1200 mi to SD</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L Power Stroke diesel, 10-spd auto, 4WD XLT with factory tow hitch. Mileage and price unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">65/100</td>
             <td><a href="https://www.cars.com/vehicledetail/8517aa6d-088d-41dd-987b-0b95d255cc26/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2022 RAM 2500 Laramie Crew Cab 4x4 6'4' Box</a></td>
             <td>Unlisted</td>
             <td>Unlisted</td>
@@ -1019,6 +1157,30 @@
             <td>N/A</td>
             <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">Unlisted</span></td>
             <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L Cummins I-6 diesel, 6-spd auto, 4WD Big Horn, 8' box. Factory tow hitch, tow hooks; price/mileage unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">65/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/8517aa6d-088d-41dd-987b-0b95d255cc26/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2022 RAM 2500 Laramie Crew Cab 4x4 6'4' Box</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>Cummins 6.7L I-6 diesel direct injection, VVT intercooled turbo, engine</td>
+            <td>Unknown</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">Unlisted</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L Cummins diesel, 4WD Laramie Crew Cab, 6'4" box. Tow hitch, tow hooks, leather, heated seats/wheel. Mileage/price unlisted.</td>
+        </tr>
+        
+        <tr>
+            <td style="font-weight:bold; color:#f57c00; font-size:1.1em;">65/100</td>
+            <td><a href="https://www.cars.com/vehicledetail/bbef48b2-bf1e-4851-9763-383c89c00c23/" target="_blank" style="text-decoration:none; color:#1a73e8; font-weight:bold;">Used 2024 RAM 2500 Big Horn Crew Cab 4x4 8' Box</a></td>
+            <td>Unlisted</td>
+            <td>Unlisted</td>
+            <td>Cummins 6.7L I-6 direct injection, VVT intercooled turbo, diesel engine</td>
+            <td>Long Bed (8')</td>
+            <td>N/A</td>
+            <td><span style="font-size:0.85em; background:#e8f0fe; padding:2px 6px; border-radius:4px;">Unlisted</span></td>
+            <td style="font-size:0.9em; color:#444; line-height:1.4;">6.7L Cummins I-6 diesel, 6-spd auto, 4WD Big Horn, 8' box. Tow hitch/hooks standard; mileage and price unlisted.</td>
         </tr>
         
         <tr>
@@ -1962,42 +2124,49 @@
     </div>
 
     <script>
-        new Chart(document.getElementById('modelScoreChart'), {
-            type: 'bar',
-            data: {
-                labels: ["RAM 2500", "Ford F-250", "Chevy 2500"],
-                datasets: [{
-                    label: 'Avg Airstream Readiness Score',
-                    data: [69.2, 62.6, 83.5],
-                    backgroundColor: '#1a73e8'
-                }]
-            },
-            options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
-        });
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js library failed to load.');
+                return;
+            }
 
-        new Chart(document.getElementById('regionChart'), {
-            type: 'bar',
-            data: {
-                labels: ["Unknown", "Texas Hub", "Desert Southwest", "SoCal Local"],
-                datasets: [{
-                    label: 'Vehicle Count',
-                    data: [65, 62, 16, 7],
-                    backgroundColor: '#f57c00'
-                }]
-            },
-            options: { responsive: true }
-        });
+            new Chart(document.getElementById('modelScoreChart'), {
+                type: 'bar',
+                data: {
+                    labels: ["RAM 2500", "Ford F-250", "Chevy 2500"],
+                    datasets: [{
+                        label: 'Avg Readiness Score',
+                        data: [70.2, 64.2, 83.5],
+                        backgroundColor: '#1a73e8'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100 } } }
+            });
 
-        new Chart(document.getElementById('engineMixChart'), {
-            type: 'doughnut',
-            data: {
-                labels: ["Diesel", "Gas", "Unspecified"],
-                datasets: [{
-                    data: [53, 45, 52],
-                    backgroundColor: ['#2e7d32', '#1a73e8', '#9e9e9e']
-                }]
-            },
-            options: { responsive: true }
+            new Chart(document.getElementById('regionChart'), {
+                type: 'bar',
+                data: {
+                    labels: ["Unknown", "Texas Hub", "Desert Southwest", "SoCal Local"],
+                    datasets: [{
+                        label: 'Vehicle Count',
+                        data: [67, 64, 20, 12],
+                        backgroundColor: '#f57c00'
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            new Chart(document.getElementById('engineMixChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ["Diesel", "Gas", "Unspecified"],
+                    datasets: [{
+                        data: [59, 52, 52],
+                        backgroundColor: ['#2e7d32', '#1a73e8', '#9e9e9e']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
         });
     </script>
 </body>
